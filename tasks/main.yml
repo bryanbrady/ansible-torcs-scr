@@ -1,0 +1,79 @@
+---
+# tasks file for ansible-torcs-scr
+
+- name: Install dependencies
+  become: yes
+  apt: name={{item}} state=installed
+  with_items:
+    - mesa-common-dev
+    - libplib-dev
+    - libvorbis-dev
+    - libxi-dev
+    - libxmu-dev
+    - libxrender-dev
+    - libxrandr-dev
+    - libz-dev
+    - libpng-dev
+    - libalut-dev
+
+- name: Download TORCS
+  get_url:
+  args:
+    url: https://sourceforge.net/projects/torcs/files/all-in-one/{{ torcs_version }}/torcs-{{ torcs_version }}.tar.bz2/download
+    dest: "/tmp/torcs-{{ torcs_version }}.tar.bz2"
+    checksum: "sha1:ed06f6629d4b21764ac8f2c543559e9104d0591d"
+
+- name: Download SCR Linux patch
+  get_url:
+  args:
+    url: https://sourceforge.net/projects/cig/files/SCR%20Championship/Server%20Linux/2.1/scr-linux-patch.tgz/download
+    dest: "/tmp/scr-linux-patch.tgz"
+    checksum: "sha1:9f0df709dc6af58c2d251691ef6c0f90918ea60c"
+
+- name: Download SCR C++ Client
+  get_url:
+  args:
+    url: https://sourceforge.net/projects/cig/files/SCR%20Championship/Client%20C%2B%2B/2.0/scr-client-cpp.tgz/download
+    dest: "/tmp/scr-client-cpp.tgz"
+    checksum: "sha1:a02902e85d30dc54a02ff79fee7be57be199fbef"
+
+- name: untar TORCS
+  unarchive: src=/tmp/torcs-{{ torcs_version }}.tar.bz2 dest={{ ansible_env.HOME }} copy=no creates={{ torcs_src_dir }}
+
+- name: untar SCR Linux patch
+  unarchive: src=/tmp/scr-linux-patch.tgz dest={{ torcs_src_dir }} copy=no creates={{ torcs_src_dir }}/scr-patch
+
+- name: untar SCR C++ Client
+  unarchive: src=/tmp/scr-client-cpp.tgz dest={{ torcs_src_dir }} copy=no creates={{ torcs_src_dir }}/scr-client-cpp
+
+- name: Apply SCR patch
+  shell: sh do_patch.sh || true
+  args:
+    chdir: "{{ torcs_src_dir }}/scr-patch"
+
+- name: Setup TORCS environment
+  blockinfile:
+    dest: "{{ ansible_env.HOME }}/.bashrc"
+    block: |
+      export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib
+      export TORCS_BASE={{ torcs_src_dir }}
+      export MAKE_DEFAULT=${TORCS_BASE}/Make-default.mk
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - TORCS"
+    insertbefore: EOF
+    create: yes
+
+- name: Configure and Make TORCS
+  shell: ./configure && make
+  args:
+    chdir: "{{ torcs_src_dir }}"
+
+- name: Install TORCS
+  become: yes
+  shell: make install datainstall
+  args:
+    chdir: "{{ torcs_src_dir }}"
+
+- name: Build TORCS C++ Client
+  shell: make
+  args:
+    chdir: "{{ torcs_src_dir }}/scr-client-cpp"

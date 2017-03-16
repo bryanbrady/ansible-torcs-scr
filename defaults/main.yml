@@ -1,0 +1,4 @@
+---
+# defaults file for ansible-torcs-scr
+torcs_version: 1.3.5
+torcs_src_dir: "{{ansible_env.HOME}}/torcs-{{ torcs_version }}"
